@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Satellite Tracking System</title>
+    
+    <!-- CSS Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { display: flex; flex-direction: column; height: 100vh; background-color: #1e1e1e; color: #fff; }
+
+        header {
+            background-color: #2d2d2d;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #333;
+        }
+
+        .title { font-size: 1.1rem; font-weight: bold; }
+
+        .status-badge {
+            color: white;
+            padding: 6px 14px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+
+        #map { flex: 1; width: 100%; z-index: 1; }
+
+        footer {
+            background: #111;
+            padding: 8px 20px;
+            font-size: 0.75rem;
+            color: #666;
+            text-align: center;
+            border-top: 1px solid #222;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="title">🛰️ Satellite Navigation System (GPS-01)</div>
+        <div id="status-badge" class="status-badge">STATUS: MEMUAT SATELLIT...</div>
+    </header>
+
+    <div id="map"></div>
+
+    <footer>
+        System Server: Apache/2.4.41 (Ubuntu) | Restricted Admin Access Only
+    </footer>
+
+<!-- JS Leaflet -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const isPatched = urlParams.get('patched') === 'true';
+
+        const statusBadge = document.getElementById('status-badge');
+
+        // Custom Icon untuk Marker Kampus (Warna Hijau)
+        const campusIcon = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+
+        // Penanda Referensi Kampus Kawasan Jatinangor & Bandung
+        const campusList = [
+            { name: "🎓 ITB Jatinangor", lat: -6.933623659303445, lng: 107.76823378685387 },
+            { name: "🎓 UNPAD Jatinangor", lat: -6.9262, lng: 107.7747 },
+            { name: "🎓 UIN Sunan Gunung Djati", lat: -6.9317, lng: 107.7176 },
+            { name: "🎓 UPI Cibiru", lat: -6.939824210273601, lng: 107.7250378305757 }
+        ];
+
+        // Fungsi Render Peta berdasarkan posisi GPS Live
+        function renderMap(userRealLat, userRealLng) {
+            // Koordinat posisi salah (Drift Error) jika belum di-patch
+            const errorLat = -6.925491612579089;
+            const errorLng = 107.76776452219993;
+
+            // Jika patched=true, gunakan koordinat LIVE GPS pengguna. Jika belum, gunakan koordinat ERROR.
+            const currentLat = isPatched ? userRealLat : errorLat;
+            const currentLng = isPatched ? userRealLng : errorLng;
+
+            // Inisialisasi Peta Leaflet
+            const map = L.map('map').setView([currentLat, currentLng], 14);
+
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19,
+                attribution: 'Tiles &copy; Esri'
+            }).addTo(map);
+
+            // Render Marker Kampus-Kampus (Hijau)
+            campusList.forEach(campus => {
+                L.marker([campus.lat, campus.lng], { icon: campusIcon })
+                    .addTo(map)
+                    .bindPopup(`<b>${campus.name}</b>`);
+            });
+
+            // Tentukan status badge & isi popup marker biru
+            let popupContent = "";
+
+            if (isPatched) {
+                statusBadge.innerText = "STATUS: SYNCHRONIZED (PATCH ACTIVE)";
+                statusBadge.style.backgroundColor = "#27ae60";
+                popupContent = `<b>LOKASI LIVE AKURAT</b><br>Lat: ${userRealLat.toFixed(6)}, Lng: ${userRealLng.toFixed(6)}<br>Koreksi waktu relativitas Einstein aktif!`;
+            } else {
+                statusBadge.innerText = "STATUS: DESYNCHRONIZED (DRIFT ERROR)";
+                statusBadge.style.backgroundColor = "#e74c3c";
+                popupContent = "<b>LOKASI TERDETEKSI (SALAH)</b><br>Penyimpangan waktu satelit: +38 mikrodetik/hari.";
+            }
+
+            // Render Marker Utama Satelit (Biru)
+            const satelliteMarker = L.marker([currentLat, currentLng]).addTo(map);
+            satelliteMarker.bindPopup(popupContent).openPopup();
+        }
+
+        // Koordinat Default (ITB Jatinangor) jika pengguna menolak/matikan akses lokasi browser
+        const fallbackLat = -6.933623659303445;
+        const fallbackLng = 107.76823378685387;
+
+        // Ambil Lokasi Real-Time via Browser Geolocation
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    // Berhasil dapat lokasi live pengguna
+                    renderMap(position.coords.latitude, position.coords.longitude);
+                },
+                (error) => {
+                    // Jika lokasi ditolak/error, gunakan titik fallback
+                    renderMap(fallbackLat, fallbackLng);
+                }
+            );
+        } else {
+            renderMap(fallbackLat, fallbackLng);
+        }
+    </script>
+</body>
+</html>
