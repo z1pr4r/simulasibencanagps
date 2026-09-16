@@ -3,3 +3,4 @@ Disallow: /sys_telemetry/
 Disallow: /public_assets/
 Disallow: /firmware_backup/
 Disallow: /nav_logs/
+Disallow: /trash/
